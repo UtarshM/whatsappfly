@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # WaBiz
 
 WhatsApp Business SaaS dashboard for Shopify stores, D2C brands, and local businesses.
@@ -17,3 +18,8 @@ WhatsApp Business SaaS dashboard for Shopify stores, D2C brands, and local busin
 - `mock`: local browser storage, no backend needed
 - `http`: custom Express backend adapter
 - `supabase`: Supabase Auth + Postgres tables
+=======
+# Welcome to your Lovable project
+
+TODO: Document your project here
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e

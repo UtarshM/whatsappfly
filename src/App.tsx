@@ -3,8 +3,11 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+<<<<<<< HEAD
 import { AppProvider } from "@/context/AppContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+=======
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import HomePage from "./pages/HomePage";
@@ -17,6 +20,7 @@ import WalletPage from "./pages/WalletPage";
 import ContactsPage from "./pages/ContactsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import CampaignsPage from "./pages/CampaignsPage";
+<<<<<<< HEAD
 import InboxPage from "./pages/InboxPage";
 import LeadsPage from "./pages/LeadsPage";
 import AutomationsPage from "./pages/AutomationsPage";
@@ -25,11 +29,14 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import ReliabilityPage from "./pages/ReliabilityPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import SettingsPage from "./pages/SettingsPage";
+=======
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+<<<<<<< HEAD
     <AppProvider>
       <TooltipProvider>
         <Toaster />
@@ -62,6 +69,28 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </AppProvider>
+=======
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/connect" element={<ConnectWhatsApp />} />
+          <Route path="/wallet" element={<WalletPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
   </QueryClientProvider>
 );
 

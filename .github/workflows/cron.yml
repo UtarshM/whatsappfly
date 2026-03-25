@@ -1,0 +1,15 @@
+name: Automation Cron
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Every 5 minutes (GitHub Actions minimum interval is roughly this)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  trigger-flows:
+    name: Proccess Automation Flows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit Process Flows Endpoint
+        run: |
+          curl -X POST "${{ secrets.VITE_API_BASE_URL }}/automation/process-flows" \
+          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"

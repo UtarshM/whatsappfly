@@ -1,9 +1,57 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { CheckCircle2, Clock, FileText, Plus, Send, ShieldCheck, XCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "@/components/ui/use-toast";
+=======
+import { FileText, Plus, CheckCircle2, Clock, XCircle, Send } from "lucide-react";
+import { motion } from "framer-motion";
+
+const templates = [
+  {
+    id: 1,
+    name: "Order Confirmation",
+    category: "Utility",
+    status: "Approved",
+    language: "English",
+    preview: "Hi {{1}}, your order #{{2}} has been confirmed! Track here: {{3}}",
+  },
+  {
+    id: 2,
+    name: "Diwali Sale Offer",
+    category: "Marketing",
+    status: "Approved",
+    language: "English",
+    preview: "🪔 Diwali Sale is LIVE! Get up to {{1}}% off on all products. Shop now: {{2}}",
+  },
+  {
+    id: 3,
+    name: "Cart Reminder",
+    category: "Marketing",
+    status: "Pending",
+    language: "English",
+    preview: "Hey {{1}}, you left items in your cart! Complete your purchase before they sell out.",
+  },
+  {
+    id: 4,
+    name: "Shipping Update",
+    category: "Utility",
+    status: "Approved",
+    language: "Hindi",
+    preview: "Hi {{1}}, your order has been shipped! Delivery by {{2}}. Track: {{3}}",
+  },
+  {
+    id: 5,
+    name: "Feedback Request",
+    category: "Marketing",
+    status: "Rejected",
+    language: "English",
+    preview: "Hi {{1}}, how was your experience with us? Rate us here: {{2}}",
+  },
+];
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
 const statusConfig = {
   Approved: { icon: CheckCircle2, className: "bg-success/10 text-success" },
@@ -12,6 +60,7 @@ const statusConfig = {
 };
 
 export default function TemplatesPage() {
+<<<<<<< HEAD
   const { templates } = useAppContext();
   const approvedCount = templates.filter((template) => template.status === "Approved").length;
 
@@ -67,12 +116,31 @@ export default function TemplatesPage() {
         <div className="grid gap-4">
           {templates.map((template, index) => {
             const statusInfo = statusConfig[template.status];
+=======
+  return (
+    <DashboardLayout>
+      <div className="max-w-5xl mx-auto space-y-8">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-foreground">Message Templates</h1>
+            <p className="text-muted-foreground mt-1">Create and manage your WhatsApp message templates</p>
+          </div>
+          <Button variant="gradient" size="sm">
+            <Plus className="h-4 w-4 mr-1" /> Create Template
+          </Button>
+        </motion.div>
+
+        <div className="grid gap-4">
+          {templates.map((template, i) => {
+            const statusInfo = statusConfig[template.status as keyof typeof statusConfig];
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
             const StatusIcon = statusInfo.icon;
             return (
               <motion.div
                 key={template.id}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
+<<<<<<< HEAD
                 transition={{ delay: index * 0.05 }}
                 className="rounded-[1.5rem] border border-border bg-card p-5 shadow-card"
               >
@@ -84,6 +152,19 @@ export default function TemplatesPage() {
                     <div>
                       <h3 className="text-base font-display font-semibold text-foreground">{template.name}</h3>
                       <div className="flex items-center gap-2 mt-1">
+=======
+                transition={{ delay: i * 0.05 }}
+                className="bg-card rounded-xl shadow-card border border-border p-5 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{template.name}</h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
                         <span className="text-xs text-muted-foreground">{template.category}</span>
                         <span className="text-xs text-muted-foreground">·</span>
                         <span className="text-xs text-muted-foreground">{template.language}</span>
@@ -96,13 +177,21 @@ export default function TemplatesPage() {
                       {template.status}
                     </span>
                     {template.status === "Approved" && (
+<<<<<<< HEAD
                       <Button variant="outline" size="sm" onClick={() => toast({ title: "Template selected", description: `${template.name} is ready to use in campaigns.` })}>
+=======
+                      <Button variant="outline" size="sm">
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
                         <Send className="h-3.5 w-3.5 mr-1" /> Use
                       </Button>
                     )}
                   </div>
                 </div>
+<<<<<<< HEAD
                 <div className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground font-mono">
+=======
+                <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground font-mono">
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
                   {template.preview}
                 </div>
               </motion.div>

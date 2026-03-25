@@ -1386,18 +1386,29 @@ app.post("/automation/definitions", async (req, res) => {
 
 app.post("/automation/process-flows", async (req, res, next) => {
   try {
+    const cronSecret = req.headers["x-cron-secret"];
+    const isCronAuthorized = cronSecret && cronSecret === process.env.CRON_SECRET;
+
     const workspaceContext = await getWorkspaceContextFromRequestAuthHeader(req.headers.authorization);
-    if (!workspaceContext) {
-      throw new Error("Supabase authorization is required to process automation flows.");
+    
+    if (!workspaceContext && !isCronAuthorized) {
+      throw new Error("Authorization or CRON_SECRET is required to process automation flows.");
     }
 
     const supabase = getSupabaseAdmin();
-    const { data: dueFlows } = await supabase
+    
+    // If it's a cron trigger without a specific workspace context, we process ALL active flows across all workspaces
+    const query = supabase
       .from("automation_flow_runs")
       .select("*")
-      .eq("workspace_id", workspaceContext.workspaceId)
       .eq("status", "active")
       .lte("scheduled_at", new Date().toISOString());
+
+    if (workspaceContext) {
+      query.eq("workspace_id", workspaceContext.workspaceId);
+    }
+
+    const { data: dueFlows } = await query;
 
     if (!dueFlows || dueFlows.length === 0) {
       res.json({ result: { ok: true, message: "No due automation flows to process." } });

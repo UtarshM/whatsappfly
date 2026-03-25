@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { MessageSquare, Chrome } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -9,11 +10,18 @@ import { activeApiAdapter } from "@/lib/api";
 import { hasSupabaseEnv } from "@/lib/supabase/client";
 import { signInWithGoogle } from "@/lib/supabase/auth";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+=======
+import { MessageSquare, Mail, Chrome } from "lucide-react";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+<<<<<<< HEAD
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signIn } = useAppContext();
 
@@ -62,6 +70,8 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+=======
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
   return (
     <div className="min-h-screen flex gradient-subtle">
@@ -104,7 +114,11 @@ export default function LoginPage() {
           <p className="text-muted-foreground mb-8">Sign in to your account to continue</p>
 
           <div className="space-y-4">
+<<<<<<< HEAD
             <Button variant="outline" size="lg" className="w-full justify-center gap-2" onClick={handleGoogleLogin} disabled={isSubmitting}>
+=======
+            <Button variant="outline" size="lg" className="w-full justify-center gap-2">
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
               <Chrome className="h-5 w-5" />
               Continue with Google
             </Button>
@@ -139,8 +153,13 @@ export default function LoginPage() {
               />
             </div>
 
+<<<<<<< HEAD
             <Button variant="gradient" size="lg" className="w-full" onClick={handleLogin} disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Sign In"}
+=======
+            <Button variant="gradient" size="lg" className="w-full" onClick={() => navigate("/onboarding")}>
+              Sign In
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
             </Button>
           </div>
 

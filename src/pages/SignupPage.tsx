@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { MessageSquare, Chrome } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -9,12 +10,19 @@ import { activeApiAdapter } from "@/lib/api";
 import { hasSupabaseEnv } from "@/lib/supabase/client";
 import { signInWithGoogle } from "@/lib/supabase/auth";
 import { getAuthErrorMessage } from "@/lib/authErrors";
+=======
+import { MessageSquare, Mail, Chrome } from "lucide-react";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+<<<<<<< HEAD
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp } = useAppContext();
 
@@ -85,6 +93,8 @@ export default function SignupPage() {
       setIsSubmitting(false);
     }
   };
+=======
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
 
   return (
     <div className="min-h-screen flex gradient-subtle">
@@ -108,7 +118,11 @@ export default function SignupPage() {
           <p className="text-muted-foreground mb-8">Get started for free in under 2 minutes</p>
 
           <div className="space-y-4">
+<<<<<<< HEAD
             <Button variant="outline" size="lg" className="w-full justify-center gap-2" onClick={handleGoogleSignup} disabled={isSubmitting}>
+=======
+            <Button variant="outline" size="lg" className="w-full justify-center gap-2">
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
               <Chrome className="h-5 w-5" /> Continue with Google
             </Button>
             <div className="relative">
@@ -127,8 +141,13 @@ export default function SignupPage() {
               <label className="text-sm font-medium text-foreground mb-1.5 block">Password</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" className="w-full h-11 px-4 rounded-lg border border-input bg-background text-sm" />
             </div>
+<<<<<<< HEAD
             <Button variant="gradient" size="lg" className="w-full" onClick={handleSignup} disabled={isSubmitting}>
               {isSubmitting ? "Creating account..." : "Create Account"}
+=======
+            <Button variant="gradient" size="lg" className="w-full" onClick={() => navigate("/onboarding")}>
+              Create Account
+>>>>>>> c444db471bbad9730b79c5546bdc0d731725dc5e
             </Button>
           </div>
 

@@ -15,16 +15,22 @@ This setup allows you to deploy both the Frontend and Backend automatically when
     - Go to [Vercel](https://vercel.com), click "Add New" > "Project".
     - Import your GitHub repo.
 3.  **Configure Build**: Vercel will automatically detect the Vite frontend. The [vercel.json](file:///Users/utkarshmakwana/Downloads/Whatsapppcom/vercel.json) file I've added will handle the Express backend routing.
-4.  **Environment Variables**: In Vercel, go to "Settings" > "Environment Variables" and add:
-    - `VITE_API_BASE_URL` = `https://your-app.vercel.app` (Your Vercel URL)
-    - `VITE_API_ADAPTER` = `http`
-    - `SUPABASE_URL` = `...`
-    - `SUPABASE_SERVICE_ROLE_KEY` = `...`
-    - `META_APP_SECRET` = `...`
+    - `VITE_META_APP_ID` = `1582499479528384`
+    - `META_APP_SECRET` = `82925cae2ab786c53bf2753b627bef6e`
     - `META_WEBHOOK_VERIFY_TOKEN` = `wabiz_automation_secret`
+    - `CRON_SECRET` = `any_random_string_here`
 5.  **Hit Deploy**: Vercel will build and serve your app.
 
-## 3. Database (Supabase) Setup
+## 3. GitHub Actions Cron (FREE Plan)
+Since the Vercel free plan does not support cron jobs, I have added a GitHub Action to handle the automation engine.
+
+1.  **Configure GitHub Secrets**:
+    - Go to your GitHub Repo > **Settings** > **Secrets and variables** > **Actions**.
+    - Add `VITE_API_BASE_URL` (e.g., `https://your-app.vercel.app`).
+    - Add `CRON_SECRET` (the same random string you used in Vercel).
+2.  **Workflow**: The [.github/workflows/cron.yml](file:///Users/utkarshmakwana/Downloads/Whatsapppcom/.github/workflows/cron.yml) file I've added will automatically trigger your automation engine every 5 minutes.
+
+## 4. Database (Supabase) Setup
 1.  Go to your Supabase SQL Editor.
 2.  Run the following files in order:
     - [supabase/schema.sql](file:///Users/utkarshmakwana/Downloads/Whatsapppcom/supabase/schema.sql)
@@ -47,8 +53,9 @@ This setup allows you to deploy both the Frontend and Backend automatically when
 2.  Update the **Callback URL** to: `https://your-app.vercel.app/webhook/whatsapp`.
 3.  Ensure **Verify Token** matches your settings (default is `wabiz_automation_secret`).
 
-## 6. Automation Scheduler (Already Handled)
-I have added a `crons` section to the `vercel.json`. Vercel will automatically trigger your automation engine once every minute to process pending flows.
+## 6. Verification
+Once live, you can manually trigger the flows by visiting:
+`POST https://your-app.vercel.app/automation/process-flows` (with the `x-cron-secret` header).
 
 ---
 

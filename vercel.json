@@ -28,11 +28,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "crons": [
-    {
-      "path": "/automation/process-flows",
-      "schedule": "* * * * *"
-    }
   ]
 }
