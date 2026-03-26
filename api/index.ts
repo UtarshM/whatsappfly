@@ -2087,3 +2087,4 @@ ensureSession(prisma)
   });
 
 export default app;
+// REFRESH: Force Vercel to pick up latest ESM fixes
