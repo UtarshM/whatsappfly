@@ -1,32 +1,21 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
+      "source": "/webhook/(.*)",
+      "destination": "/api/index.ts"
     },
     {
-      "src": "server/index.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/webhook/(.*)",
-      "dest": "server/index.ts"
+      "source": "/automation/(.*)",
+      "destination": "/api/index.ts"
     },
     {
-      "src": "/automation/(.*)",
-      "dest": "server/index.ts"
+      "source": "/t/(.*)",
+      "destination": "/api/index.ts"
     },
     {
-      "src": "/t/(.*)",
-      "dest": "server/index.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
