@@ -1,11 +1,13 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import cors from "cors";
 import express from "express";
 import { CampaignStatus, ConnectionStatus, MessageTemplateCategory, TemplateStatus } from "@prisma/client";
 import { z } from "zod";
-import { COST_PER_MESSAGE } from "../src/lib/api/types";
-import { prisma } from "./prisma";
+import { COST_PER_MESSAGE } from "../src/lib/api/types.js";
+import { prisma } from "./prisma.js";
 import {
   buildAppState,
   createWorkspaceForUser,
@@ -14,8 +16,8 @@ import {
   getCurrentUser,
   seedWorkspace,
   setCurrentUser,
-} from "./state";
-import { startFlowForLead, processFlowRun } from "./flowEngine";
+} from "./state.js";
+import { startFlowForLead, processFlowRun } from "./flowEngine.js";
 import {
   buildCampaignBodyParameters,
   buildTemplateBodyParameters,
@@ -24,14 +26,14 @@ import {
   mapTemplateLanguageToMetaCode,
   sendMetaTemplateMessage,
   sendMetaTextMessage,
-} from "./meta";
+} from "./meta.js";
 import {
   type SummarizedLeadWebhookEvent,
   type SummarizedMetaWebhookEvent,
   type SummarizedWhatsAppWebhookEvent,
   summarizeMetaWebhookPayload,
-} from "./metaWebhook";
-import { getSupabaseAdmin, getWorkspaceContextFromRequestAuthHeader } from "./supabaseAdmin";
+} from "./metaWebhook.js";
+import { getSupabaseAdmin, getWorkspaceContextFromRequestAuthHeader } from "./supabaseAdmin.js";
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -40,7 +42,11 @@ app.use(cors({
   origin: true,
   credentials: true,
 }));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "../dist")));
 
 const emailSchema = z.object({
   email: z.string().email(),
@@ -2061,6 +2067,11 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   }
 
   res.status(500).json({ message: "Unexpected server error." });
+});
+
+// Fallback for SPA to serve index.html
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
 ensureSession(prisma)
