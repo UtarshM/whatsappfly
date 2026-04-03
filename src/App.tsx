@@ -25,6 +25,8 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import ReliabilityPage from "./pages/ReliabilityPage";
 import TransactionsPage from "./pages/TransactionsPage";
 import SettingsPage from "./pages/SettingsPage";
+import AdminPanelPage from "./pages/AdminPanelPage";
+import ResellerPortalPage from "./pages/ResellerPortalPage";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +58,12 @@ const App = () => (
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/reliability" element={<ReliabilityPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={["platform_admin"]} />}>
+              <Route path="/admin" element={<AdminPanelPage />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={["platform_admin", "reseller"]} />}>
+              <Route path="/reseller" element={<ResellerPortalPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -2,9 +2,54 @@ export const STORAGE_KEY = "wabiz-app-state";
 export const COST_PER_MESSAGE = 0.5;
 export const LOW_BALANCE_THRESHOLD = 500;
 
+export type UserAccessRole = "workspace_owner" | "platform_admin" | "reseller";
+
 export interface User {
   name: string;
   email: string;
+}
+
+export interface WorkspaceProfile {
+  id: string;
+  name: string;
+  plan: "Starter" | "Growth" | "Enterprise";
+  billingStatus: "Active" | "Trial" | "Past Due";
+  activeContacts: number;
+  monthlySpend: number;
+  ownerName: string;
+  ownerEmail: string;
+  resellerId: string | null;
+  resellerName: string | null;
+}
+
+export interface ResellerProfile {
+  id: string;
+  name: string;
+  email: string;
+  companyName: string;
+  tier: "Silver" | "Gold" | "Platinum";
+  status: "Active" | "Pending" | "Suspended";
+  commissionRate: number;
+  clientsManaged: number;
+  monthlyRecurringRevenue: number;
+  monthlyPayout: number;
+  referralCode: string;
+  pipelineValue: number;
+}
+
+export interface PlatformAlert {
+  id: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  description: string;
+}
+
+export interface PlatformState {
+  currentRole: UserAccessRole;
+  workspaces: WorkspaceProfile[];
+  resellers: ResellerProfile[];
+  resellerProfile: ResellerProfile | null;
+  alerts: PlatformAlert[];
 }
 
 export type WhatsAppConnectionStatus = "pending" | "connected" | "disconnected";
@@ -21,6 +66,19 @@ export type AutomationRuleType =
   | "auto_assign_new_lead"
   | "no_reply_reminder"
   | "follow_up_after_contacted";
+
+export interface TemplateButton {
+  type: "url" | "phone" | "quick_reply";
+  text: string;
+  url?: string;
+  phoneNumber?: string;
+}
+
+export interface TemplateHeader {
+  type: "text" | "image" | "video" | "document" | "none";
+  text?: string;
+  url?: string;
+}
 
 export interface AutomationRuleConfig {
   message?: string;
@@ -75,9 +133,13 @@ export interface Contact {
 export interface Template {
   id: string;
   name: string;
-  category: "Marketing" | "Utility";
+  category: "Marketing" | "Utility" | "Authentication";
   status: "Approved" | "Pending" | "Rejected";
   language: string;
+  header?: TemplateHeader;
+  body: string;
+  footer?: string;
+  buttons?: TemplateButton[];
   preview: string;
 }
 
@@ -88,8 +150,12 @@ export interface Campaign {
   contactIds: string[];
   status: "Draft" | "Scheduled" | "Sending" | "Delivered";
   date: string;
+  scheduledAt?: string;
   estimatedCost: number;
   spent: number;
+  sent: number;
+  delivered: number;
+  read: number;
 }
 
 export interface Transaction {
@@ -187,6 +253,7 @@ export interface Lead {
 export interface AppState {
   user: User | null;
   onboardingComplete: boolean;
+  platform: PlatformState;
   walletBalance: number;
   totalSpent: number;
   messagesSent: number;
@@ -248,6 +315,17 @@ export interface CreateCampaignInput {
   templateId: string;
   contactIds: string[];
   sendNow: boolean;
+  scheduledAt?: string;
+}
+
+export interface CreateTemplateInput {
+  name: string;
+  category: "Marketing" | "Utility" | "Authentication";
+  language: string;
+  header?: TemplateHeader;
+  body: string;
+  footer?: string;
+  buttons?: TemplateButton[];
 }
 
 export type AddContactInput = Omit<Contact, "id">;
@@ -257,6 +335,13 @@ export function emptyAppState(): AppState {
   return {
     user: null,
     onboardingComplete: false,
+    platform: {
+      currentRole: "workspace_owner",
+      workspaces: [],
+      resellers: [],
+      resellerProfile: null,
+      alerts: [],
+    },
     walletBalance: 0,
     totalSpent: 0,
     messagesSent: 0,

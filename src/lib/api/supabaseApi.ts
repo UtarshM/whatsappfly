@@ -11,6 +11,7 @@ import {
   type AppState,
   type ConnectWhatsAppInput,
   type CreateCampaignInput,
+  type CreateTemplateInput,
   type RetryFailedSendInput,
   type UpdateAutomationInput,
   type UpdateConversationInput,
@@ -224,7 +225,7 @@ async function buildSupabaseAppState(): Promise<AppState> {
     client.from("profiles").select("full_name, email, onboarding_complete").eq("id", context.user.id).single(),
     client.from("contacts").select("id, name, phone, contact_tags(tag)").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }),
     client.from("message_templates").select("id, name, category, status, language, body").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }),
-    client.from("campaigns").select("id, name, template_id, status, estimated_cost, spent, launched_at, scheduled_for, created_at, campaign_recipients(contact_id)").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }),
+    client.from("campaigns").select("id, name, template_id, status, estimated_cost, spent, launched_at, scheduled_for, created_at, sent_count, delivered_count, read_count, campaign_recipients(contact_id)").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }),
     client.from("wallet_transactions").select("id, type, amount, description, balance_after, created_at").eq("workspace_id", context.workspaceId).order("created_at", { ascending: false }),
     client.from("whatsapp_connections").select("meta_business_id, meta_business_portfolio_id, waba_id, phone_number_id, display_phone_number, verified_name, business_portfolio, business_name, status, business_verification_status, account_review_status, oba_status").eq("workspace_id", context.workspaceId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("meta_authorizations").select("expires_at").eq("workspace_id", context.workspaceId).maybeSingle(),
@@ -278,6 +279,7 @@ async function buildSupabaseAppState(): Promise<AppState> {
         }
       : null,
     onboardingComplete: profileRes.data?.onboarding_complete ?? false,
+    platform: emptyAppState().platform,
     walletBalance,
     totalSpent,
     messagesSent: (campaignsRes.data ?? []).reduce((sum, campaign) => {
@@ -298,6 +300,7 @@ async function buildSupabaseAppState(): Promise<AppState> {
       category: template.category === "marketing" ? "Marketing" : "Utility",
       status: template.status === "approved" ? "Approved" : template.status === "pending" ? "Pending" : "Rejected",
       language: template.language,
+      body: template.body,
       preview: template.body,
     })),
     campaigns: (campaignsRes.data ?? []).map((campaign) => ({
@@ -307,8 +310,12 @@ async function buildSupabaseAppState(): Promise<AppState> {
       contactIds: (campaign.campaign_recipients ?? []).map((recipient) => recipient.contact_id),
       status: campaign.status === "draft" ? "Draft" : campaign.status === "scheduled" ? "Scheduled" : campaign.status === "sending" ? "Sending" : "Delivered",
       date: (campaign.launched_at ?? campaign.scheduled_for ?? campaign.created_at)!,
+      scheduledAt: campaign.scheduled_for,
       estimatedCost: Number(campaign.estimated_cost),
       spent: Number(campaign.spent),
+      sent: campaign.sent_count || 0,
+      delivered: campaign.delivered_count || 0,
+      read: campaign.read_count || 0,
     })),
     transactions: (transactionsRes.data ?? []).map((transaction) => ({
       id: transaction.id,
@@ -592,6 +599,162 @@ export const supabaseApi: AppApi = {
     return { state: await buildSupabaseAppState(), result: { ok: true, message: "Balance added successfully." } };
   },
 
+  async createCampaign(input: CreateCampaignInput) {
+    const client = requireSupabase();
+    const { workspaceId } = await currentWorkspaceIdOrThrow();
+    const currentState = await buildSupabaseAppState();
+    const estimatedCost = Number((input.contactIds.length * COST_PER_MESSAGE).toFixed(2));
+
+    if (input.sendNow && currentState.walletBalance < estimatedCost) {
+      return { state: currentState, result: { ok: false, message: "Insufficient wallet balance for this campaign." } };
+    }
+
+    const { data: campaign, error } = await client
+      .from("campaigns")
+      .insert({
+        workspace_id: workspaceId,
+        template_id: input.templateId,
+        name: input.name,
+        status: input.sendNow ? "sending" : (input.scheduledAt ? "scheduled" : "draft"),
+        estimated_cost: estimatedCost,
+        spent: input.sendNow ? estimatedCost : 0,
+        launched_at: input.sendNow ? new Date().toISOString() : null,
+        scheduled_for: input.scheduledAt || null,
+        sent_count: input.sendNow ? input.contactIds.length : 0,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    const { error: recipientsError } = await client.from("campaign_recipients").insert(
+      input.contactIds.map((contactId) => ({
+        workspace_id: workspaceId,
+        campaign_id: campaign.id,
+        contact_id: contactId,
+        status: input.sendNow ? "sent" : "queued",
+        cost: COST_PER_MESSAGE,
+      })),
+    );
+
+    if (recipientsError) {
+      throw recipientsError;
+    }
+
+    if (input.sendNow) {
+      const { error: transactionError } = await client.from("wallet_transactions").insert({
+        workspace_id: workspaceId,
+        type: "debit",
+        amount: -estimatedCost,
+        description: `${input.name} (${input.contactIds.length} msgs)`,
+        reference_type: "campaign_send",
+        reference_id: campaign.id,
+        balance_after: currentState.walletBalance - estimatedCost,
+      });
+      if (transactionError) {
+        throw transactionError;
+      }
+    }
+
+    return {
+      state: await buildSupabaseAppState(),
+      result: {
+        ok: true,
+        message: input.sendNow ? "Campaign launched successfully." : "Draft saved successfully.",
+      },
+    };
+  },
+
+  async createTemplate(input: CreateTemplateInput) {
+    const { data: { session } } = await requireSupabase().auth.getSession();
+    if (!session) throw new Error("Authentication required to create templates.");
+
+    const mapLanguage = (lang: string) => {
+      const normalized = lang.trim().toLowerCase();
+      if (normalized === "hindi" || normalized === "hi") return "hi";
+      return "en";
+    };
+
+    // 1. Transform internal layout into Meta's Component format
+    interface MetaTemplateComponent {
+      type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS";
+      format?: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
+      text?: string;
+      example?: {
+        header_handle?: string[];
+        body_text?: string[][];
+      };
+      buttons?: Array<{
+        type: "PHONE_NUMBER" | "URL" | "QUICK_REPLY";
+        text: string;
+        phone_number?: string;
+        url?: string;
+      }>;
+    }
+
+    const components: MetaTemplateComponent[] = [
+      {
+        type: "BODY",
+        text: input.body,
+      }
+    ];
+
+    if (input.header && input.header.type !== "none") {
+      const header: MetaTemplateComponent = { type: "HEADER" };
+      if (input.header.type === "text") {
+        header.format = "TEXT";
+        header.text = input.header.text;
+      } else {
+        header.format = input.header.type.toUpperCase() as MetaTemplateComponent["format"];
+        header.example = { header_handle: [input.header.url || ""] };
+      }
+      components.push(header);
+    }
+
+    if (input.footer) {
+      components.push({ type: "FOOTER", text: input.footer });
+    }
+
+    if (input.buttons && input.buttons.length > 0) {
+      components.push({
+        type: "BUTTONS",
+        buttons: input.buttons.map(btn => {
+          if (btn.type === "url") {
+            return { type: "URL", text: btn.text, url: btn.url };
+          }
+          if (btn.type === "phone") {
+            return { type: "PHONE_NUMBER", text: btn.text, phone_number: btn.phoneNumber };
+          }
+          return { type: "QUICK_REPLY", text: btn.text };
+        })
+      });
+    }
+
+    // 2. Call our backend to perform the real registration
+    const response = await fetch("/meta/templates", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        name: input.name.toLowerCase().replace(/\s+/g, "_"),
+        category: input.category.toUpperCase(),
+        language: mapLanguage(input.language),
+        components
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to register template with Meta.");
+    }
+
+    return buildSupabaseAppState();
+  },
+
   async addContact(input: AddContactInput) {
     const client = requireSupabase();
     const { workspaceId } = await currentWorkspaceIdOrThrow();
@@ -817,70 +980,6 @@ export const supabaseApi: AppApi = {
     return {
       state: await buildSupabaseAppState(),
       result,
-    };
-  },
-
-  async createCampaign(input: CreateCampaignInput) {
-    const client = requireSupabase();
-    const { workspaceId } = await currentWorkspaceIdOrThrow();
-    const currentState = await buildSupabaseAppState();
-    const estimatedCost = Number((input.contactIds.length * COST_PER_MESSAGE).toFixed(2));
-
-    if (input.sendNow && currentState.walletBalance < estimatedCost) {
-      return { state: currentState, result: { ok: false, message: "Insufficient wallet balance for this campaign." } };
-    }
-
-    const { data: campaign, error } = await client
-      .from("campaigns")
-      .insert({
-        workspace_id: workspaceId,
-        template_id: input.templateId,
-        name: input.name,
-        status: input.sendNow ? "sending" : "draft",
-        estimated_cost: estimatedCost,
-        spent: input.sendNow ? estimatedCost : 0,
-        launched_at: input.sendNow ? new Date().toISOString() : null,
-      })
-      .select("id")
-      .single();
-    if (error) {
-      throw error;
-    }
-
-    const { error: recipientsError } = await client.from("campaign_recipients").insert(
-      input.contactIds.map((contactId) => ({
-        workspace_id: workspaceId,
-        campaign_id: campaign.id,
-        contact_id: contactId,
-        status: input.sendNow ? "sent" : "queued",
-        cost: COST_PER_MESSAGE,
-      })),
-    );
-    if (recipientsError) {
-      throw recipientsError;
-    }
-
-    if (input.sendNow) {
-      const { error: transactionError } = await client.from("wallet_transactions").insert({
-        workspace_id: workspaceId,
-        type: "debit",
-        amount: -estimatedCost,
-        description: `${input.name} (${input.contactIds.length} msgs)`,
-        reference_type: "campaign_send",
-        reference_id: campaign.id,
-        balance_after: currentState.walletBalance - estimatedCost,
-      });
-      if (transactionError) {
-        throw transactionError;
-      }
-    }
-
-    return {
-      state: await buildSupabaseAppState(),
-      result: {
-        ok: true,
-        message: input.sendNow ? "Campaign launched successfully." : "Draft saved successfully.",
-      },
     };
   },
 };

@@ -24,6 +24,7 @@ import {
   exchangeMetaCode,
   getMetaWebhookVerifyToken,
   mapTemplateLanguageToMetaCode,
+  registerMetaTemplate,
   sendMetaTemplateMessage,
   sendMetaTextMessage,
 } from "./meta.js";
@@ -119,6 +120,13 @@ const automationLeadContactedSchema = z.object({
 
 const retryFailedSendSchema = z.object({
   failedSendLogId: z.string().uuid(),
+});
+
+const metaCreateTemplateSchema = z.object({
+  name: z.string().min(1),
+  category: z.string().min(1),
+  language: z.string().min(1),
+  components: z.array(z.any()),
 });
 
 function actionResponse(data: unknown, result: { ok: boolean; message: string }) {
@@ -934,6 +942,58 @@ app.post("/meta/source-mappings", async (req, res, next) => {
     }
 
     res.json({ data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/meta/templates", async (req, res, next) => {
+  try {
+    const payload = metaCreateTemplateSchema.parse(req.body);
+    const workspaceContext = await getWorkspaceContextFromRequestAuthHeader(req.headers.authorization);
+    if (!workspaceContext) {
+      throw new Error("Supabase authorization is required to register templates.");
+    }
+
+    const { workspaceId } = workspaceContext;
+    const auth = await prisma.metaAuthorization.findFirst({
+      where: { workspaceId },
+    });
+
+    const connection = await prisma.whatsAppConnection.findFirst({
+      where: { workspaceId },
+    });
+
+    if (!auth || !connection || !connection.wabaId) {
+      throw new Error("Missing Meta connection details (WABA ID or Access Token).");
+    }
+
+    // Register with Meta
+    const metaResponse = await registerMetaTemplate({
+      accessToken: auth.accessToken,
+      wabaId: connection.wabaId,
+      name: payload.name,
+      category: payload.category,
+      language: payload.language,
+      components: payload.components,
+    });
+
+    // Also persist in our DB for immediate UI feedback
+    // Extract body for preview from components
+    const bodyComponent = payload.components.find((c: any) => c.type === "BODY");
+    
+    await prisma.messageTemplate.create({
+      data: {
+        workspaceId,
+        name: payload.name,
+        category: payload.category.toLowerCase() as any,
+        language: payload.language,
+        body: bodyComponent?.text || "",
+        status: "pending" as any,
+      }
+    });
+
+    res.json({ result: { ok: true, message: "Template registered with Meta and saved." }, metaResponse });
   } catch (error) {
     next(error);
   }
@@ -2018,7 +2078,7 @@ app.post("/campaigns", async (req, res, next) => {
         spent: payload.sendNow ? estimatedCost : 0,
         launchedAt: payload.sendNow ? new Date() : null,
         recipients: {
-          create: contacts.map((contact) => ({
+          create: contacts.map((contact: { id: string }) => ({
             workspaceId: user.workspaceId,
             contactId: contact.id,
             status: payload.sendNow ? "sent" : "queued",
@@ -2074,10 +2134,116 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
+async function processScheduledCampaigns() {
+  try {
+    const now = new Date();
+    // Find scheduled campaigns that are due
+    const campaignsToProcess = await prisma.campaign.findMany({
+      where: {
+        status: CampaignStatus.scheduled,
+        scheduledFor: {
+          lte: now,
+        },
+      },
+      include: {
+        template: true,
+        recipients: {
+          include: {
+            contact: true,
+          },
+        },
+      },
+    });
+
+    if (campaignsToProcess.length === 0) return;
+
+    console.log(`Processing ${campaignsToProcess.length} scheduled campaigns...`);
+
+    for (const campaign of campaignsToProcess) {
+      // 1. Mark campaign as sending
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: CampaignStatus.sending, launchedAt: now },
+      });
+
+      // 2. Fetch Meta auth for the workspace
+      const auth = await prisma.metaAuthorization.findFirst({
+        where: { workspaceId: campaign.workspaceId },
+      });
+
+      const connection = await prisma.whatsAppConnection.findFirst({
+        where: { workspaceId: campaign.workspaceId },
+      });
+
+      if (!auth || !connection) {
+        console.error(`Missing Meta auth or connection for workspace ${campaign.workspaceId}`);
+        await prisma.campaign.update({
+          where: { id: campaign.id },
+          data: { status: CampaignStatus.draft }, // Revert to draft if we can't send
+        });
+        continue;
+      }
+
+      // 3. Process each recipient
+      let sentCount = 0;
+      for (const recipient of campaign.recipients) {
+        try {
+          // In a real production app, you might want to throttle these calls
+          const bodyParameters = buildCampaignBodyParameters({
+            templateBody: campaign.template.body,
+            contactName: recipient.contact.name,
+            contactPhone: recipient.contact.phone,
+          });
+
+          await sendMetaTemplateMessage({
+            accessToken: auth.accessToken,
+            phoneNumberId: connection.phoneNumberId!,
+            to: recipient.contact.phone,
+            templateName: campaign.template.name,
+            languageCode: mapTemplateLanguageToMetaCode(campaign.template.language),
+            bodyParameters,
+          });
+
+          await prisma.campaignRecipient.update({
+            where: { id: recipient.id },
+            data: { status: "sent" },
+          });
+          sentCount++;
+        } catch (error) {
+          console.error(`Failed to send campaign ${campaign.id} to ${recipient.contact.phone}`, error);
+          await prisma.campaignRecipient.update({
+            where: { id: recipient.id },
+            data: { status: "failed" },
+          });
+        }
+      }
+
+      // 4. Finalize campaign status
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { 
+          status: CampaignStatus.delivered,
+          sent_count: sentCount,
+          delivered_count: sentCount, // Assuming delivered for mock/internal use
+        },
+      });
+      
+      console.log(`Campaign ${campaign.name} processed: ${sentCount} messages sent.`);
+    }
+  } catch (error) {
+    console.error("Error in processScheduledCampaigns:", error);
+  }
+}
+
+// Start the background worker
+setInterval(processScheduledCampaigns, 30 * 1000); // Check every 30 seconds
+
 ensureSession(prisma)
   .then(() => {
     app.listen(port, () => {
       console.log(`WaBiz API listening on http://localhost:${port}`);
+      // Initial check on startup
+      processScheduledCampaigns();
     });
   })
   .catch(async (error) => {

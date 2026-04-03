@@ -1,4 +1,5 @@
 import {
+  BriefcaseBusiness,
   LayoutDashboard,
   MessageSquare,
   Wallet,
@@ -13,6 +14,7 @@ import {
   Bot,
   BarChart3,
   ShieldAlert,
+  UserRoundCog,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
@@ -31,7 +33,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAppContext } from "@/context/AppContext";
 
-const mainItems = [
+const workspaceItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Connect WhatsApp", url: "/connect", icon: Link2 },
   { title: "Campaigns", url: "/campaigns", icon: MessageSquare },
@@ -46,6 +48,16 @@ const mainItems = [
   { title: "Transactions", url: "/transactions", icon: Receipt },
 ];
 
+const adminItems = [
+  { title: "Admin Panel", url: "/admin", icon: UserRoundCog },
+  { title: "Reseller Hub", url: "/reseller", icon: BriefcaseBusiness },
+];
+
+const resellerItems = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Reseller Hub", url: "/reseller", icon: BriefcaseBusiness },
+];
+
 const bottomItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
@@ -54,7 +66,12 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const navigate = useNavigate();
-  const { signOut, user } = useAppContext();
+  const { signOut, user, currentRole } = useAppContext();
+  const mainItems = currentRole === "platform_admin"
+    ? adminItems
+    : currentRole === "reseller"
+      ? resellerItems
+      : workspaceItems;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -102,8 +119,11 @@ export function AppSidebar() {
       <SidebarFooter className="p-2">
         {!collapsed && user && (
           <div className="mx-2 mb-2 rounded-xl border border-sidebar-border bg-sidebar-accent/50 p-3">
-            <p className="text-sm font-medium text-foreground">{user.name}</p>
+              <p className="text-sm font-medium text-foreground">{user.name}</p>
             <p className="text-xs text-muted-foreground">{user.email}</p>
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-primary">
+              {currentRole === "platform_admin" ? "Platform Admin" : currentRole === "reseller" ? "Reseller" : "Workspace Owner"}
+            </p>
           </div>
         )}
         <SidebarMenu>

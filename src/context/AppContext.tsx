@@ -10,8 +10,10 @@ import {
   type Campaign,
   type ConnectWhatsAppInput,
   type CreateCampaignInput,
+  type CreateTemplateInput,
   type RetryFailedSendInput,
   type Template,
+  type UserAccessRole,
   type UpdateAutomationInput,
   type UpdateConversationInput,
   type UpdateLeadInput,
@@ -23,6 +25,9 @@ import { supabase } from "@/lib/supabase/client";
 interface AppContextValue extends AppState {
   isAuthenticated: boolean;
   isHydrating: boolean;
+  currentRole: UserAccessRole;
+  isPlatformAdmin: boolean;
+  isReseller: boolean;
   costPerMessage: number;
   lowBalanceThreshold: number;
   approvedTemplates: Template[];
@@ -44,6 +49,7 @@ interface AppContextValue extends AppState {
   runAutomationSweep: () => Promise<ActionResult>;
   retryFailedSend: (input: RetryFailedSendInput) => Promise<ActionResult>;
   createCampaign: (input: CreateCampaignInput) => Promise<ActionResult>;
+  createTemplate: (input: CreateTemplateInput) => Promise<void>;
   refreshAppState: () => Promise<void>;
 }
 
@@ -95,6 +101,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...state,
     isAuthenticated: Boolean(state.user),
     isHydrating,
+    currentRole: state.platform.currentRole,
+    isPlatformAdmin: state.platform.currentRole === "platform_admin",
+    isReseller: state.platform.currentRole === "reseller",
     costPerMessage: COST_PER_MESSAGE,
     lowBalanceThreshold: LOW_BALANCE_THRESHOLD,
     approvedTemplates: state.templates.filter((template) => template.status === "Approved"),
@@ -172,6 +181,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { state: nextState, result } = await api.createCampaign(input);
       setState(nextState);
       return result;
+    },
+    createTemplate: async (input: CreateTemplateInput) => {
+      const nextState = await api.createTemplate(input);
+      setState(nextState);
     },
     refreshAppState: async () => {
       const nextState = await api.getAppState();

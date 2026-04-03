@@ -161,6 +161,33 @@ export interface MetaInteractiveSendInput {
   buttons?: MetaButton[];
 }
 
+export interface MetaTemplateComponent {
+  type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS";
+  format?: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
+  text?: string;
+  example?: {
+    header_text?: string[];
+    body_text?: string[][];
+    header_handle?: string[];
+  };
+  buttons?: Array<{
+    type: "PHONE_NUMBER" | "URL" | "QUICK_REPLY";
+    text: string;
+    phone_number?: string;
+    url?: string;
+    example?: string[];
+  }>;
+}
+
+export interface MetaTemplateCreateInput {
+  accessToken: string;
+  wabaId: string;
+  name: string;
+  category: string;
+  language: string;
+  components: MetaTemplateComponent[];
+}
+
 export function mapTemplateLanguageToMetaCode(language: string) {
   const normalized = language.trim().toLowerCase();
 
@@ -352,11 +379,21 @@ export async function sendMetaTextMessage(input: MetaTextSendInput) {
   });
 }
 
+interface MetaInteractiveObject {
+  type: "button" | "list";
+  body: { text: string };
+  header?: { type: "text"; text: string };
+  footer?: { text: string };
+  action?: {
+    buttons?: MetaButton[];
+  };
+}
+
 export async function sendMetaInteractiveMessage(input: MetaInteractiveSendInput) {
   const config = requireMetaServerConfig();
   const url = `https://graph.facebook.com/${config.apiVersion}/${input.phoneNumberId}/messages`;
 
-  const interactive: any = {
+  const interactive: MetaInteractiveObject = {
     type: input.type,
     body: { text: input.body },
   };
@@ -385,6 +422,26 @@ export async function sendMetaInteractiveMessage(input: MetaInteractiveSendInput
       to: input.to,
       type: "interactive",
       interactive,
+    }),
+  });
+}
+
+export async function registerMetaTemplate(input: MetaTemplateCreateInput) {
+  const config = requireMetaServerConfig();
+  const url = `https://graph.facebook.com/${config.apiVersion}/${input.wabaId}/message_templates`;
+
+  return fetchJson(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: input.name,
+      category: input.category,
+      allow_category_change: true,
+      language: input.language,
+      components: input.components,
     }),
   });
 }

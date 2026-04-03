@@ -17,6 +17,18 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signIn } = useAppContext();
 
+  const resolveDestination = (nextState: Awaited<ReturnType<typeof signIn>>) => {
+    if (nextState.platform.currentRole === "platform_admin") {
+      return "/admin";
+    }
+
+    if (nextState.platform.currentRole === "reseller") {
+      return "/reseller";
+    }
+
+    return nextState.onboardingComplete ? "/dashboard" : "/onboarding";
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       toast({ title: "Missing details", description: "Enter your email and password to continue." });
@@ -28,7 +40,7 @@ export default function LoginPage() {
     try {
       const nextState = await signIn(email.trim(), password);
       toast({ title: "Signed in", description: "Your workspace is ready." });
-      navigate(nextState.onboardingComplete ? "/dashboard" : "/onboarding");
+      navigate(resolveDestination(nextState));
     } catch (error) {
       toast({
         title: "Login failed",
@@ -51,7 +63,7 @@ export default function LoginPage() {
 
       const nextState = await signIn("founder@wabiz.app", "demo-password");
       toast({ title: "Signed in with Google", description: "Demo account connected successfully." });
-      navigate(nextState.onboardingComplete ? "/dashboard" : "/onboarding");
+      navigate(resolveDestination(nextState));
     } catch (error) {
       toast({
         title: "Google login failed",
@@ -149,6 +161,9 @@ export default function LoginPage() {
             <button onClick={() => navigate("/signup")} className="text-primary font-medium hover:underline">
               Sign up
             </button>
+          </p>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Demo roles: use an email containing `admin` for admin access or `reseller` for reseller access.
           </p>
         </motion.div>
       </div>

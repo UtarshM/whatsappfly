@@ -1,8 +1,13 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
+import type { UserAccessRole } from "@/lib/api";
 
-export default function ProtectedRoute() {
-  const { isAuthenticated, isHydrating } = useAppContext();
+interface ProtectedRouteProps {
+  allowedRoles?: UserAccessRole[];
+}
+
+export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
+  const { isAuthenticated, isHydrating, currentRole } = useAppContext();
   const location = useLocation();
 
   if (isHydrating) {
@@ -17,6 +22,10 @@ export default function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(currentRole)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

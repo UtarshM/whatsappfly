@@ -4,7 +4,7 @@ import { useAppContext } from "@/context/AppContext";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, isHydrating, onboardingComplete } = useAppContext();
+  const { isAuthenticated, isHydrating, onboardingComplete, currentRole } = useAppContext();
 
   useEffect(() => {
     if (isHydrating) {
@@ -12,12 +12,22 @@ const Index = () => {
     }
 
     if (!isAuthenticated) {
-      navigate("/home");
+      navigate("/dashboard");
+      return;
+    }
+
+    if (currentRole === "platform_admin") {
+      navigate("/admin");
+      return;
+    }
+
+    if (currentRole === "reseller") {
+      navigate("/reseller");
       return;
     }
 
     navigate(onboardingComplete ? "/dashboard" : "/onboarding");
-  }, [isAuthenticated, isHydrating, navigate, onboardingComplete]);
+  }, [currentRole, isAuthenticated, isHydrating, navigate, onboardingComplete]);
 
   return null;
 };

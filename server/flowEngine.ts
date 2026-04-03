@@ -173,11 +173,11 @@ function findNextNodeId(nodeId: string, edges: any[], sourceHandle?: string): st
 }
 
 async function handleTagStep(supabase: any, flowRun: any, data: any) {
-  const { data: lead } = await supabase.from("leads").select("id").eq("id", flowRun.lead_id).single();
-  if (lead) {
+  const { data: lead } = await supabase.from("leads").select("contact_id").eq("id", flowRun.lead_id).single();
+  if (lead?.contact_id) {
     await supabase.from("contact_tags").upsert({
       workspace_id: flowRun.workspace_id,
-      contact_id: lead.id,
+      contact_id: lead.contact_id,
       tag: data.tag,
     }, { onConflict: "contact_id,tag" });
   }
@@ -185,10 +185,13 @@ async function handleTagStep(supabase: any, flowRun: any, data: any) {
 
 async function evaluateCondition(supabase: any, flowRun: any, data: any): Promise<boolean> {
   if (data.type === "has_tag") {
+    const { data: lead } = await supabase.from("leads").select("contact_id").eq("id", flowRun.lead_id).single();
+    if (!lead?.contact_id) return false;
+
     const { data: tag } = await supabase
       .from("contact_tags")
       .select("tag")
-      .eq("contact_id", flowRun.lead_id)
+      .eq("contact_id", lead.contact_id)
       .eq("tag", data.tag)
       .maybeSingle();
     return !!tag;
@@ -217,14 +220,25 @@ async function handleFlowMessageSend(supabase: any, flowRun: any, config: any) {
 
   if (!connection || !auth || !lead) throw new Error("Missing flow prerequisites.");
 
-  await sendMetaTemplateMessage({
-    accessToken: auth.access_token,
-    phoneNumberId: connection.phone_number_id,
-    to: lead.phone,
-    templateName: config.templateName,
-    languageCode: config.languageCode || "en",
-    bodyParameters: [lead.full_name],
-  });
+  try {
+    await sendMetaTemplateMessage({
+      accessToken: auth.access_token,
+      phoneNumberId: connection.phone_number_id,
+      to: lead.phone,
+      templateName: config.templateName,
+      languageCode: config.languageCode || "en",
+      bodyParameters: [lead.full_name],
+    });
+  } catch (error) {
+    console.error(`Failed to send template ${config.templateName}, falling back to text message`, error);
+    // Fallback to text message if template fails (e.g. not approved yet)
+    await sendMetaTextMessage({
+      accessToken: auth.access_token,
+      phoneNumberId: connection.phone_number_id,
+      to: lead.phone,
+      body: `Hi ${lead.full_name}, thank you for your interest! We will get back to you shortly.`,
+    });
+  }
 }
 
 async function handleFlowInteractiveSend(supabase: any, flowRun: any, config: any) {

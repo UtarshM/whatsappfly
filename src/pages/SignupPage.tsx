@@ -18,6 +18,18 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp } = useAppContext();
 
+  const resolveDestination = (nextState: Awaited<ReturnType<typeof signUp>>) => {
+    if (nextState.platform.currentRole === "platform_admin") {
+      return "/admin";
+    }
+
+    if (nextState.platform.currentRole === "reseller") {
+      return "/reseller";
+    }
+
+    return nextState.onboardingComplete ? "/dashboard" : "/onboarding";
+  };
+
   const isEmailConfirmationRequired = (error: unknown) => (
     error instanceof Error && /email confirmation is required/i.test(error.message)
   );
@@ -33,7 +45,7 @@ export default function SignupPage() {
     try {
       const nextState = await signUp(name.trim(), email.trim(), password);
       toast({ title: "Account created", description: "Let's finish onboarding your workspace." });
-      navigate(nextState.onboardingComplete ? "/dashboard" : "/onboarding");
+      navigate(resolveDestination(nextState));
     } catch (error) {
       if (isEmailConfirmationRequired(error)) {
         toast({
@@ -65,7 +77,7 @@ export default function SignupPage() {
 
       const nextState = await signUp("WaBiz Founder", "founder@wabiz.app", "demo-password");
       toast({ title: "Google account connected", description: "Your workspace has been created." });
-      navigate(nextState.onboardingComplete ? "/dashboard" : "/onboarding");
+      navigate(resolveDestination(nextState));
     } catch (error) {
       if (isEmailConfirmationRequired(error)) {
         toast({
@@ -135,6 +147,9 @@ export default function SignupPage() {
           <p className="text-sm text-muted-foreground mt-6 text-center">
             Already have an account?{" "}
             <button onClick={() => navigate("/login")} className="text-primary font-medium hover:underline">Sign in</button>
+          </p>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Use an email containing `admin` or `reseller` to preview those roles in mock mode.
           </p>
         </motion.div>
       </div>

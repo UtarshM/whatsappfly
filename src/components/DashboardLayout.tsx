@@ -3,7 +3,12 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { useAppContext } from "@/context/AppContext";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, walletBalance, whatsApp } = useAppContext();
+  const { user, walletBalance, whatsApp, currentRole } = useAppContext();
+  const roleLabel = currentRole === "platform_admin"
+    ? "Platform Admin"
+    : currentRole === "reseller"
+      ? "Reseller"
+      : "Workspace Owner";
 
   return (
     <SidebarProvider>
@@ -18,12 +23,23 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                   {user ? `Welcome back, ${user.name}` : "WaBiz Workspace"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {whatsApp.connected ? `${whatsApp.displayPhoneNumber} connected` : "Connect WhatsApp to start messaging"}
+                  {currentRole === "platform_admin"
+                    ? "Platform visibility across resellers and customer workspaces"
+                    : currentRole === "reseller"
+                      ? "Partner pipeline, payouts, and managed client workspaces"
+                      : whatsApp.connected
+                        ? `${whatsApp.displayPhoneNumber} connected`
+                        : "Connect WhatsApp to start messaging"}
                 </p>
               </div>
             </div>
-            <div className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground">
-              Wallet: Rs {walletBalance.toLocaleString()}
+            <div className="flex items-center gap-2">
+              <div className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                {roleLabel}
+              </div>
+              <div className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground">
+                Wallet: Rs {walletBalance.toLocaleString()}
+              </div>
             </div>
           </header>
           <main className="flex-1 p-6 overflow-auto gradient-subtle">

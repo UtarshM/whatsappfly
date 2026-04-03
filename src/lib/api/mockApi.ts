@@ -7,11 +7,14 @@ import {
   type AppState,
   type ConnectWhatsAppInput,
   type CreateCampaignInput,
+  type CreateTemplateInput,
   type AddConversationNoteInput,
   type RetryFailedSendInput,
+  type ResellerProfile,
   type UpdateAutomationInput,
   type UpdateConversationInput,
   type UpdateLeadInput,
+  type UserAccessRole,
 } from "@/lib/api/types";
 
 function cloneState(state: AppState): AppState {
@@ -28,6 +31,54 @@ function pushActivity(state: AppState, title: string, subtitle: string) {
     },
     ...state.recentActivity,
   ].slice(0, 6);
+}
+
+function resolveRoleFromEmail(email: string): UserAccessRole {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (normalizedEmail.includes("admin")) {
+    return "platform_admin";
+  }
+
+  if (normalizedEmail.includes("reseller") || normalizedEmail.includes("partner")) {
+    return "reseller";
+  }
+
+  return "workspace_owner";
+}
+
+function findResellerProfile(state: AppState, email: string): ResellerProfile | null {
+  const normalizedEmail = email.trim().toLowerCase();
+  return state.platform.resellers.find((reseller) => reseller.email.toLowerCase() === normalizedEmail) ?? null;
+}
+
+function applyRoleToState(state: AppState, email: string) {
+  const role = resolveRoleFromEmail(email);
+  const matchedReseller = role === "reseller" ? findResellerProfile(state, email) : null;
+
+  return {
+    onboardingComplete: role === "workspace_owner" ? state.onboardingComplete : true,
+    platform: {
+      ...state.platform,
+      currentRole: role,
+      resellerProfile: role === "reseller"
+        ? matchedReseller ?? {
+            id: "res-demo",
+            name: "Demo Reseller",
+            email,
+            companyName: "New Partner Desk",
+            tier: "Silver",
+            status: "Pending",
+            commissionRate: 12,
+            clientsManaged: 0,
+            monthlyRecurringRevenue: 0,
+            monthlyPayout: 0,
+            referralCode: "NEW-PARTNER",
+            pipelineValue: 0,
+          }
+        : state.platform.resellerProfile,
+    },
+  };
 }
 
 export function readAppState(): AppState {
@@ -61,12 +112,15 @@ export const mockApi = {
   async signIn(email: string, _password: string) {
     const state = readAppState();
     const fallbackName = email.split("@")[0].replace(/[._-]/g, " ");
+    const roleState = applyRoleToState(state, email);
     const nextState: AppState = {
       ...state,
       user: {
         name: fallbackName.replace(/\b\w/g, (char) => char.toUpperCase()),
         email,
       },
+      onboardingComplete: roleState.onboardingComplete,
+      platform: roleState.platform,
     };
     writeAppState(nextState);
     return nextState;
@@ -74,9 +128,12 @@ export const mockApi = {
 
   async signUp(name: string, email: string, _password: string) {
     const state = readAppState();
+    const roleState = applyRoleToState(state, email);
     const nextState: AppState = {
       ...state,
       user: { name, email },
+      onboardingComplete: roleState.onboardingComplete,
+      platform: roleState.platform,
     };
     writeAppState(nextState);
     return nextState;
@@ -88,6 +145,10 @@ export const mockApi = {
       ...state,
       user: null,
       onboardingComplete: false,
+      platform: {
+        ...state.platform,
+        currentRole: "workspace_owner",
+      },
     };
     writeAppState(nextState);
     return nextState;
@@ -389,16 +450,21 @@ export const mockApi = {
           name: input.name,
           templateId: input.templateId,
           contactIds: input.contactIds,
-          status: input.sendNow ? "Sending" : "Draft",
+          status: input.sendNow ? "Sending" : (input.scheduledAt ? "Scheduled" : "Draft"),
           date: new Date().toISOString(),
+          scheduledAt: input.scheduledAt,
           estimatedCost,
           spent: input.sendNow ? estimatedCost : 0,
+          sent: input.sendNow ? input.contactIds.length : 0,
+          delivered: 0,
+          read: 0,
         },
         ...state.campaigns,
       ],
       walletBalance: nextBalance,
       totalSpent: input.sendNow ? state.totalSpent + estimatedCost : state.totalSpent,
       messagesSent: input.sendNow ? state.messagesSent + input.contactIds.length : state.messagesSent,
+
       transactions: input.sendNow
         ? [
             {
@@ -428,6 +494,29 @@ export const mockApi = {
       },
     };
   },
+  
+  async createTemplate(input: CreateTemplateInput) {
+    const state = readAppState();
+    const nextState: AppState = {
+      ...state,
+      templates: [
+        {
+          id: crypto.randomUUID(),
+          status: "Pending",
+          preview: input.body,
+          ...input,
+        },
+        ...state.templates,
+      ],
+      recentActivity: pushActivity(
+        state,
+        "Template submitted",
+        `${input.name} is now pending Meta approval`,
+      ),
+    };
+    writeAppState(nextState);
+    return nextState;
+  },
 };
 
 export interface AppApi {
@@ -448,4 +537,5 @@ export interface AppApi {
   runAutomationSweep: () => Promise<{ state: AppState; result: ActionResult }>;
   retryFailedSend: (input: RetryFailedSendInput) => Promise<{ state: AppState; result: ActionResult }>;
   createCampaign: (input: CreateCampaignInput) => Promise<{ state: AppState; result: ActionResult }>;
+  createTemplate: (input: CreateTemplateInput) => Promise<AppState>;
 }

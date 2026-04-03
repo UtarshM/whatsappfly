@@ -12,6 +12,12 @@ import {
   Target,
   Users,
   Wallet,
+  Calendar,
+  Filter,
+  BarChart3,
+  Eye,
+  Check,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
@@ -47,16 +53,29 @@ export default function CampaignsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [search, setSearch] = useState("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    contacts.forEach(c => c.tags.forEach(t => tags.add(t)));
+    return Array.from(tags);
+  }, [contacts]);
 
   const filteredContacts = useMemo(
     () =>
-      contacts.filter(
-        (contact) =>
+      contacts.filter((contact) => {
+        const matchesSearch =
           contact.name.toLowerCase().includes(search.toLowerCase()) ||
-          contact.phone.includes(search) ||
-          contact.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase())),
-      ),
-    [contacts, search],
+          contact.phone.includes(search);
+        
+        const matchesTags = selectedTags.length === 0 || 
+          selectedTags.some(tag => contact.tags.includes(tag));
+          
+        return matchesSearch && matchesTags;
+      }),
+    [contacts, search, selectedTags],
   );
 
   const selectedTemplate = approvedTemplates.find((template) => template.id === selectedTemplateId);
@@ -92,11 +111,11 @@ export default function CampaignsPage() {
   const resetWizard = () => {
     setShowWizard(false);
     setStep(0);
-    setCampaignName("");
-    setSelectedContacts([]);
-    setSelectedTemplateId("");
     setSearch("");
     setTemplateVariables({});
+    setSelectedTags([]);
+    setScheduledDate("");
+    setScheduledTime("");
   };
 
   const goNext = () => {
@@ -127,28 +146,16 @@ export default function CampaignsPage() {
       return;
     }
 
-    if (sendNow && activeApiAdapter === "supabase") {
-      try {
-        await sendMetaCampaignWithServer({
-          templateId: selectedTemplateId,
-          contactIds: selectedContacts,
-          bodyParameters: templatePlaceholders.map((placeholder) => templateVariables[placeholder] ?? ""),
-        });
-      } catch (error) {
-        toast({
-          title: "Meta send failed",
-          description: error instanceof Error ? error.message : "Campaign could not be sent through Meta.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
+    const scheduledAt = scheduledDate && scheduledTime 
+      ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+      : undefined;
 
     const result = await createCampaign({
       name: campaignName || `Campaign ${new Date().toLocaleDateString("en-IN")}`,
       templateId: selectedTemplateId,
       contactIds: selectedContacts,
-      sendNow,
+      sendNow: sendNow && !scheduledAt,
+      scheduledAt,
     });
 
     if (!result.ok) {
@@ -156,7 +163,10 @@ export default function CampaignsPage() {
       return;
     }
 
-    toast({ title: sendNow ? "Campaign sent" : "Draft saved", description: result.message });
+    toast({ 
+      title: scheduledAt ? "Campaign scheduled" : (sendNow ? "Campaign sent" : "Draft saved"), 
+      description: result.message 
+    });
     resetWizard();
   };
 
@@ -272,13 +282,64 @@ export default function CampaignsPage() {
                         <h3 className="font-display text-lg font-semibold text-foreground">Choose audience</h3>
                         <p className="text-sm text-muted-foreground">Select the customer group that should receive this campaign</p>
                       </div>
-                      <input
-                        type="text"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search name, phone, or tag"
-                        className="h-10 w-full rounded-xl border border-input bg-background px-4 text-sm md:max-w-xs"
-                      />
+                      <div className="flex items-center gap-2 w-full md:max-w-md">
+                        <div className="relative flex-1">
+                          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <input
+                            type="text"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search name or phone"
+                            className="h-10 w-full rounded-xl border border-input bg-background pl-10 pr-4 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 py-2">
+                       {allTags.map(tag => (
+                         <button
+                           key={tag}
+                           onClick={() => setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                           className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                             selectedTags.includes(tag) 
+                              ? "gradient-primary text-white shadow-sm" 
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                           }`}
+                         >
+                           {tag}
+                         </button>
+                       ))}
+                       {allTags.length > 0 && (
+                         <button 
+                           onClick={() => setSelectedTags([])}
+                           className="text-xs text-primary hover:underline px-2"
+                         >
+                           Clear tags
+                         </button>
+                       )}
+                    </div>
+                    
+                    <div className="flex items-center justify-between bg-muted/30 p-3 rounded-xl">
+                       <span className="text-xs font-medium text-muted-foreground">
+                         Showing {filteredContacts.length} contacts
+                       </span>
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="h-7 text-xs"
+                         onClick={() => {
+                           const allIds = filteredContacts.map(c => c.id);
+                           const someSelected = allIds.some(id => selectedContacts.includes(id));
+                           if (someSelected) {
+                             setSelectedContacts(prev => prev.filter(id => !allIds.includes(id)));
+                           } else {
+                             setSelectedContacts(prev => Array.from(new Set([...prev, ...allIds])));
+                           }
+                         }}
+                       >
+                         {filteredContacts.every(c => selectedContacts.includes(c.id)) ? "Deselect All" : "Select All Filtered"}
+                       </Button>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       {filteredContacts.map((contact) => (
@@ -446,6 +507,34 @@ export default function CampaignsPage() {
                         </div>
                       </div>
                     )}
+
+                    <div className="rounded-2xl border border-border bg-muted/30 p-6 space-y-4">
+                       <div className="flex items-center gap-2">
+                         <Calendar className="h-5 w-5 text-primary" />
+                         <h4 className="font-semibold text-foreground">Schedule this campaign (Optional)</h4>
+                       </div>
+                       <p className="text-sm text-muted-foreground">Leave blank to send immediately after approval.</p>
+                       <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground uppercase">Date</label>
+                            <input 
+                              type="date" 
+                              value={scheduledDate}
+                              onChange={e => setScheduledDate(e.target.value)}
+                              className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground uppercase">Time</label>
+                            <input 
+                              type="time" 
+                              value={scheduledTime}
+                              onChange={e => setScheduledTime(e.target.value)}
+                              className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                            />
+                          </div>
+                       </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -534,17 +623,33 @@ export default function CampaignsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Spend</p>
-                    <p className="text-sm font-semibold text-foreground">Rs {campaign.estimatedCost.toLocaleString()}</p>
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-8 px-4 border-l border-border hidden lg:flex">
+                    <div className="text-center">
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Sent</p>
+                      <p className="text-sm font-bold text-foreground">{campaign.sent.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] uppercase font-bold text-success mb-1">Deliv.</p>
+                      <p className="text-sm font-bold text-foreground">{campaign.delivered.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] uppercase font-bold text-primary mb-1">Read</p>
+                      <p className="text-sm font-bold text-foreground">{campaign.read.toLocaleString()}</p>
+                    </div>
                   </div>
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusStyles[campaign.status]}`}>
-                    {campaign.status}
-                  </span>
-                  <Button variant="ghost" size="sm" className="text-primary">
-                    Open <ArrowUpRight className="h-4 w-4 ml-1" />
-                  </Button>
+                  <div className="text-right min-w-[80px]">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Cost</p>
+                    <p className="text-sm font-bold text-foreground">Rs {campaign.spent.toLocaleString()}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${statusStyles[campaign.status]}`}>
+                      {campaign.status}
+                    </span>
+                    <Button variant="ghost" size="sm" className="h-8 text-primary px-2 hover:bg-primary/5">
+                      View Details <Eye className="h-3.5 w-3.5 ml-1.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </motion.div>
