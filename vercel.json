@@ -2,18 +2,6 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/webhook/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/automation/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/t/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -11,12 +11,12 @@ export * from "@/lib/api/contracts";
 export * from "@/lib/api/types";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const adapter = import.meta.env.VITE_API_ADAPTER?.trim() || "mock";
+const adapter = import.meta.env.VITE_API_ADAPTER?.trim() || "http";
 
 export const activeApiAdapter = adapter;
 
-export const api = adapter === "http" && baseUrl
+export const api = (adapter === "http" && baseUrl)
   ? createHttpApi({ baseUrl })
-  : adapter === "supabase" && hasSupabaseEnv
+  : (adapter === "supabase" && hasSupabaseEnv)
     ? supabaseApi
     : mockApi;
