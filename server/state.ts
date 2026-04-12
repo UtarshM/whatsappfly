@@ -7,6 +7,16 @@ import {
   type User,
 } from "@prisma/client";
 import { COST_PER_MESSAGE, type AppState } from "../src/lib/api/types";
+import { getSupabaseAdmin } from "./supabaseAdmin";
+
+function getAuthorizationStatus(expiresAt: string | null | undefined): "missing" | "active" | "expiring_soon" | "expired" {
+  if (!expiresAt) return "missing";
+  const expires = new Date(expiresAt).getTime();
+  const now = Date.now();
+  if (expires <= now) return "expired";
+  if (expires - now <= 7 * 24 * 60 * 60 * 1000) return "expiring_soon";
+  return "active";
+}
 
 const seedContacts = [
   { name: "Rahul Sharma", phone: "+91 98765 43210", tags: ["VIP", "Shopify"] },
@@ -322,34 +332,51 @@ export async function buildAppState(prisma: PrismaClient, user: User | null): Pr
     },
   });
 
-  const walletBalance = workspace.walletTransactions[0]?.balanceAfter ?? 0;
+  const latestConnection = workspace.whatsAppConnections[0];
+
+  // Fetch data from Supabase for automation, inbox and connection features
+  const supabase = getSupabaseAdmin();
+  const [
+    { data: connectionRes },
+    { data: authorizationRes },
+    { data: conversations },
+    { data: conversationMessages },
+    { data: conversationNotes },
+    { data: conversationEvents },
+    { data: failedSendLogs },
+    { data: operationalLogs },
+    { data: leads },
+    { data: rules },
+    { data: automationEvents },
+    transactionsRes,
+  ] = await Promise.all([
+    supabase.from("whatsapp_connections").select("*").eq("workspace_id", workspace.id).maybeSingle(),
+    supabase.from("meta_authorizations").select("*").eq("workspace_id", workspace.id).maybeSingle(),
+    supabase.from("conversations").select("*").eq("workspace_id", workspace.id).orderBy("last_message_at", { ascending: false }),
+    supabase.from("conversation_messages").select("*").eq("workspace_id", workspace.id).orderBy("sent_at", { ascending: true }),
+    supabase.from("conversation_notes").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("conversation_events").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("failed_send_logs").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("operational_logs").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("leads").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("automation_rules").select("*").eq("workspace_id", workspace.id).orderBy("updated_at", { ascending: false }),
+    supabase.from("automation_events").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("wallet_transactions").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+  ]);
+
+  const supabaseTransactions = transactionsRes?.data ?? [];
+  const walletBalance = supabaseTransactions[0]?.balance_after ?? 0;
   const totalSpent = Math.abs(
-    workspace.walletTransactions
-      .filter((tx) => tx.type === "debit")
-      .reduce((sum, tx) => sum + tx.amount, 0),
+    supabaseTransactions
+      .filter((tx: any) => tx.type === "debit")
+      .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0),
   );
-  const messagesSent = workspace.campaigns.reduce((sum, campaign) => {
+  const messagesSent = (workspace.campaigns || []).reduce((sum, campaign) => {
     if (campaign.status === CampaignStatus.draft) {
       return sum;
     }
-    return sum + campaign.recipients.length;
+    return sum + (campaign.recipients?.length ?? 0);
   }, 0);
-  const latestConnection = workspace.whatsAppConnections[0];
-
-  const recentActivity = [
-    ...workspace.campaigns.slice(0, 2).map((campaign) => ({
-      id: `campaign-${campaign.id}`,
-      title: campaign.status === CampaignStatus.draft ? "Campaign drafted" : "Campaign updated",
-      subtitle: `${campaign.name} is currently ${campaign.status}`,
-      timestamp: campaign.updatedAt.toLocaleDateString("en-IN", { dateStyle: "medium" }),
-    })),
-    ...workspace.walletTransactions.slice(0, 2).map((transaction) => ({
-      id: `wallet-${transaction.id}`,
-      title: transaction.type === "credit" ? "Wallet recharged" : "Wallet debited",
-      subtitle: transaction.description,
-      timestamp: transaction.createdAt.toLocaleDateString("en-IN", { dateStyle: "medium" }),
-    })),
-  ].slice(0, 6);
 
   return {
     user: {
@@ -360,11 +387,11 @@ export async function buildAppState(prisma: PrismaClient, user: User | null): Pr
     walletBalance,
     totalSpent,
     messagesSent,
-    contacts: workspace.contacts.map((contact) => ({
+    contacts: (contacts ?? []).map((contact) => ({
       id: contact.id,
       name: contact.name,
       phone: contact.phone,
-      tags: contact.tags.map((tag) => tag.tag),
+      tags: (contact.contact_tags ?? []).map((t: any) => t.tag),
     })),
     templates: workspace.templates.map((template) => ({
       id: template.id,
@@ -394,31 +421,31 @@ export async function buildAppState(prisma: PrismaClient, user: User | null): Pr
       estimatedCost: campaign.estimatedCost,
       spent: campaign.spent,
     })),
-    transactions: workspace.walletTransactions.map((transaction) => ({
+    transactions: supabaseTransactions.map((transaction: any) => ({
       id: transaction.id,
       type: transaction.type === "credit" ? "credit" : "debit",
       desc: transaction.description,
-      amount: transaction.amount,
-      date: transaction.createdAt.toISOString(),
-      balance: transaction.balanceAfter,
+      amount: Number(transaction.amount),
+      date: transaction.created_at,
+      balance: Number(transaction.balance_after),
     })),
-    whatsApp: latestConnection
+    whatsApp: connectionRes.data
       ? {
-          connected: latestConnection.status === "connected",
-          connectionStatus: latestConnection.status,
-          businessVerificationStatus: "unverified",
-          accountReviewStatus: "pending_review",
-          obaStatus: "not_applied",
-          metaBusinessId: "",
-          metaBusinessPortfolioId: "",
-          wabaId: "",
-          phoneNumberId: "",
-          displayPhoneNumber: latestConnection.phoneNumber,
-          verifiedName: "",
-          businessPortfolio: latestConnection.businessPortfolio,
-          businessName: latestConnection.businessName,
-          authorizationStatus: "active" as const,
-          authorizationExpiresAt: null,
+          connected: connectionRes.data.status === "connected",
+          connectionStatus: connectionRes.data.status,
+          businessVerificationStatus: connectionRes.data.business_verification_status,
+          accountReviewStatus: connectionRes.data.account_review_status,
+          obaStatus: connectionRes.data.oba_status,
+          metaBusinessId: connectionRes.data.meta_business_id ?? "",
+          metaBusinessPortfolioId: connectionRes.data.meta_business_portfolio_id ?? "",
+          wabaId: connectionRes.data.waba_id ?? "",
+          phoneNumberId: connectionRes.data.phone_number_id ?? "",
+          displayPhoneNumber: connectionRes.data.display_phone_number,
+          verifiedName: connectionRes.data.verified_name ?? "",
+          businessPortfolio: connectionRes.data.business_portfolio,
+          businessName: connectionRes.data.business_name,
+          authorizationStatus: authorizationRes.data ? getAuthorizationStatus(authorizationRes.data.expires_at) : "missing",
+          authorizationExpiresAt: authorizationRes.data?.expires_at ?? null,
         }
       : {
           connected: false,
@@ -437,15 +464,113 @@ export async function buildAppState(prisma: PrismaClient, user: User | null): Pr
           authorizationStatus: "missing" as const,
           authorizationExpiresAt: null,
         },
-    conversations: [],
-    conversationMessages: [],
-    conversationNotes: [],
-    conversationEvents: [],
-    failedSendLogs: [],
-    operationalLogs: [],
-    leads: [],
-    automations: [],
-    automationEvents: [],
+    conversations: (conversations ?? []).map((c) => ({
+      id: c.id,
+      contactId: c.contact_id,
+      phone: c.phone,
+      displayName: c.display_name,
+      status: c.status === "open" ? "Open" : c.status === "pending" ? "Pending" : "Resolved",
+      source: c.source === "meta_ads" ? "Meta Ads" : c.source === "whatsapp_inbound" ? "WhatsApp Inbound" : c.source === "campaign" ? "Campaign" : c.source === "manual" ? "Manual" : "Organic",
+      assignedTo: c.assigned_to,
+      lastMessagePreview: c.last_message_preview,
+      lastMessageAt: c.last_message_at,
+      unreadCount: c.unread_count,
+    })),
+    conversationMessages: (conversationMessages ?? []).map((m) => ({
+      id: m.id,
+      conversationId: m.conversation_id,
+      direction: m.direction === "inbound" ? "Inbound" : "Outbound",
+      messageType: m.message_type,
+      body: m.body,
+      status: m.status,
+      sentAt: m.sent_at,
+    })),
+    conversationNotes: (conversationNotes ?? []).map((n) => ({
+      id: n.id,
+      conversationId: n.conversation_id,
+      body: n.body,
+      authorName: n.author_name,
+      createdAt: n.created_at,
+    })),
+    conversationEvents: (conversationEvents ?? []).map((e) => ({
+      id: e.id,
+      conversationId: e.conversation_id,
+      eventType: e.event_type,
+      summary: e.summary,
+      actorName: e.actor_name,
+      createdAt: e.created_at,
+    })),
+    failedSendLogs: (failedSendLogs ?? []).map((l) => ({
+      id: l.id,
+      channel: l.channel,
+      targetType: l.target_type,
+      targetId: l.target_id,
+      destination: l.destination,
+      templateName: l.template_name,
+      messageBody: l.message_body,
+      errorMessage: l.error_message,
+      status: l.status,
+      createdAt: l.created_at,
+    })),
+    operationalLogs: (operationalLogs ?? []).map((l) => ({
+      id: l.id,
+      eventType: l.event_type,
+      level: l.level,
+      summary: l.summary,
+      createdAt: l.created_at,
+    })),
+    leads: (leads ?? []).map((l) => ({
+      id: l.id,
+      contactId: l.contact_id,
+      conversationId: l.conversation_id,
+      fullName: l.full_name,
+      phone: l.phone,
+      email: l.email,
+      status: l.status === "new" ? "New" : l.status === "contacted" ? "Contacted" : l.status === "qualified" ? "Qualified" : l.status === "won" ? "Won" : "Lost",
+      source: l.source === "meta_ads" ? "Meta Ads" : l.source === "whatsapp_inbound" ? "WhatsApp Inbound" : l.source === "campaign" ? "Campaign" : l.source === "manual" ? "Manual" : "Organic",
+      sourceLabel: l.source_label,
+      assignedTo: l.assigned_to,
+      notes: l.notes,
+      createdAt: l.created_at,
+    })),
+    automations: (rules ?? []).map((r) => ({
+      id: r.id,
+      type: r.rule_type,
+      name: r.name,
+      enabled: r.enabled,
+      config: r.config as any,
+      updatedAt: r.updated_at,
+    })),
+    automationEvents: (automationEvents ?? []).map((e) => ({
+      id: e.id,
+      ruleType: e.rule_type,
+      conversationId: e.conversation_id,
+      leadId: e.lead_id,
+      status: e.status as any,
+      summary: e.summary,
+      createdAt: e.created_at,
+    })),
     recentActivity,
+    // Partner system (mocked for now as it's purely in Prisma)
+    partners: workspace.partners.map((p) => ({
+      id: p.id,
+      partnerType: p.partnerType,
+      status: p.status,
+      companyName: p.companyName,
+      contactName: p.contactName,
+      email: p.email,
+      phone: p.phone,
+      commissionRate: p.commissionRate,
+      tier: p.tier,
+      referralCode: p.referralCode,
+      totalReferrals: p.totalReferrals,
+      totalEarned: p.totalEarned,
+      totalPaid: p.totalPaid,
+      createdAt: p.createdAt.toISOString(),
+    })),
+    partnerProfile: null,
+    partnerStats: null,
+    partnerReferrals: [],
+    partnerPayouts: [],
   };
 }

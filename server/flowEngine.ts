@@ -1,11 +1,38 @@
-import type { getSupabaseAdmin } from "./supabaseAdmin";
-import { sendMetaTextMessage, sendMetaTemplateMessage, sendMetaInteractiveMessage } from "./meta";
-
 export type FlowStepType = "wait" | "tag" | "send_message" | "send_interactive" | "condition";
 
 export interface FlowStep {
   type: FlowStepType;
   config: Record<string, any>;
+}
+
+export interface FlowRun {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  flow_definition_id: string;
+  current_node_id: string;
+  status: "active" | "completed" | "failed";
+  retry_count: number;
+  scheduled_at: string;
+}
+
+export interface FlowNode {
+  id: string;
+  type: string;
+  data: any;
+}
+
+export interface FlowEdge {
+  source: string;
+  target: string;
+  sourceHandle?: string;
+}
+
+export interface FlowDefinition {
+  id: string;
+  workspace_id: string;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
 }
 
 export const PHASE_1_FLOW: FlowStep[] = [
@@ -76,7 +103,7 @@ export async function startFlowForLead(
 
 export async function processFlowRun(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  flowRun: any,
+  flowRun: FlowRun,
 ) {
   if (!flowRun.flow_definition_id || !flowRun.current_node_id) {
     await supabase.from("automation_flow_runs").update({ status: "failed" }).eq("id", flowRun.id);
@@ -94,8 +121,8 @@ export async function processFlowRun(
     return;
   }
 
-  const nodes = definition.nodes as any[];
-  const edges = definition.edges as any[];
+  const nodes = definition.nodes as FlowNode[];
+  const edges = definition.edges as FlowEdge[];
   const node = nodes.find((n) => n.id === flowRun.current_node_id);
 
   if (!node) {
@@ -119,7 +146,7 @@ export async function processFlowRun(
         break;
 
       case "wait":
-        delayHours = node.data?.hours ?? 1;
+        delayHours = (node.data as any)?.hours ?? 1;
         nextNodeId = findNextNodeId(node.id, edges);
         break;
 
@@ -154,11 +181,11 @@ export async function processFlowRun(
     }
   } catch (error) {
     console.error(`Flow node ${flowRun.current_node_id} failed`, error);
-    if (flowRun.retry_count < 3) {
+    if ((flowRun.retry_count ?? 0) < 3) {
       await supabase
         .from("automation_flow_runs")
         .update({
-          retry_count: flowRun.retry_count + 1,
+          retry_count: (flowRun.retry_count ?? 0) + 1,
           scheduled_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         })
         .eq("id", flowRun.id);
@@ -168,12 +195,12 @@ export async function processFlowRun(
   }
 }
 
-function findNextNodeId(nodeId: string, edges: any[], sourceHandle?: string): string | null {
+function findNextNodeId(nodeId: string, edges: FlowEdge[], sourceHandle?: string): string | null {
   const edge = edges.find((e) => e.source === nodeId && (!sourceHandle || e.sourceHandle === sourceHandle));
   return edge ? edge.target : null;
 }
 
-async function handleTagStep(supabase: any, flowRun: any, data: any) {
+async function handleTagStep(supabase: any, flowRun: FlowRun, data: any) {
   const { data: lead } = await supabase.from("leads").select("contact_id").eq("id", flowRun.lead_id).single();
   if (lead?.contact_id) {
     await supabase.from("contact_tags").upsert({
@@ -184,7 +211,7 @@ async function handleTagStep(supabase: any, flowRun: any, data: any) {
   }
 }
 
-async function evaluateCondition(supabase: any, flowRun: any, data: any): Promise<boolean> {
+async function evaluateCondition(supabase: any, flowRun: FlowRun, data: any): Promise<boolean> {
   if (data.type === "has_tag") {
     const { data: tag } = await supabase
       .from("contact_tags")
@@ -197,7 +224,7 @@ async function evaluateCondition(supabase: any, flowRun: any, data: any): Promis
   return false;
 }
 
-async function handleFlowMessageSend(supabase: any, flowRun: any, config: any) {
+async function handleFlowMessageSend(supabase: any, flowRun: FlowRun, config: any) {
   const { data: connection } = await supabase
     .from("whatsapp_connections")
     .select("phone_number_id")
@@ -228,7 +255,7 @@ async function handleFlowMessageSend(supabase: any, flowRun: any, config: any) {
   });
 }
 
-async function handleFlowInteractiveSend(supabase: any, flowRun: any, config: any) {
+async function handleFlowInteractiveSend(supabase: any, flowRun: FlowRun, config: any) {
   const { data: connection } = await supabase
     .from("whatsapp_connections")
     .select("phone_number_id")

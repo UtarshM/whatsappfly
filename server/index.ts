@@ -857,12 +857,29 @@ app.post("/meta/exchange-code", async (req, res, next) => {
       const workspaceContext = await getWorkspaceContextFromRequestAuthHeader(req.headers.authorization);
       if (workspaceContext) {
         const supabase = getSupabaseAdmin();
-        await supabase.from("meta_authorizations").upsert({
-          workspace_id: workspaceContext.workspaceId,
-          access_token: data.authorization.accessToken,
-          token_type: data.authorization.tokenType,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        });
+        await Promise.all([
+          supabase.from("meta_authorizations").upsert({
+            workspace_id: workspaceContext.workspaceId,
+            access_token: data.authorization.accessToken,
+            token_type: data.authorization.tokenType,
+            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+          }),
+          supabase.from("whatsapp_connections").upsert({
+            workspace_id: workspaceContext.workspaceId,
+            meta_business_id: data.candidate.metaBusinessId,
+            meta_business_portfolio_id: data.candidate.metaBusinessPortfolioId,
+            waba_id: data.candidate.wabaId,
+            phone_number_id: data.candidate.phoneNumberId,
+            display_phone_number: data.candidate.displayPhoneNumber,
+            verified_name: data.candidate.verifiedName,
+            business_portfolio: data.candidate.businessPortfolio,
+            business_name: data.candidate.businessName,
+            status: "connected",
+            business_verification_status: data.candidate.businessVerificationStatus,
+            account_review_status: data.candidate.accountReviewStatus,
+            oba_status: data.candidate.obaStatus,
+          }, { onConflict: "workspace_id" }),
+        ]);
       }
     } catch (persistenceError) {
       console.error("Failed to persist Meta authorization", persistenceError);
@@ -1841,6 +1858,20 @@ app.post("/whatsapp/connect", async (req, res, next) => {
       });
     }
 
+    // Sync with Supabase
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase.from("whatsapp_connections").upsert({
+        workspace_id: user.workspaceId,
+        business_portfolio: payload.businessPortfolio,
+        business_name: payload.businessName,
+        display_phone_number: payload.phoneNumber,
+        status: "connected",
+      }, { onConflict: "workspace_id" });
+    } catch (supabaseError) {
+      console.error("Failed to sync WhatsApp connection to Supabase", supabaseError);
+    }
+
     const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     const data = await buildAppState(prisma, freshUser);
     res.json({ data });
@@ -1856,6 +1887,15 @@ app.post("/whatsapp/disconnect", async (_req, res, next) => {
       where: { workspaceId: user.workspaceId },
       data: { status: ConnectionStatus.disconnected },
     });
+
+    // Sync with Supabase
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase.from("whatsapp_connections").update({ status: "disconnected" }).eq("workspace_id", user.workspaceId);
+    } catch (supabaseError) {
+      console.error("Failed to sync WhatsApp disconnect to Supabase", supabaseError);
+    }
+
     const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     const data = await buildAppState(prisma, freshUser);
     res.json({ data });
