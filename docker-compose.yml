@@ -1,0 +1,33 @@
+services:
+  # 1. Backend (The Express API)
+  backend:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    depends_on:
+      - redis
+
+  # 2. Redis (Used for distributed locking)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # 3. Frontend (Vite Development Server)
+  frontend:
+    image: node:20-bullseye
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3001
+      - VITE_API_ADAPTER=http
+    command: sh -c "npm install && npm run dev -- --host"
