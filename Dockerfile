@@ -1,23 +1,24 @@
-FROM node:24.19-bullseye
+FROM node:22-bullseye-slim
 
 WORKDIR /app
 
-# Copy dependency definitions
-COPY package*.json ./
+# Install openssl for Prisma
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# CRITICAL: We copy the prisma folder before npm install 
-# because the 'postinstall' script in package.json needs 
-# the schema.prisma file to generate the client.
+# Copy package files
+COPY package*.json ./
 COPY prisma ./prisma/
 
-# This will now succeed because the prisma folder exists
-RUN npm install
+# Install dependencies, skip postinstall to avoid premature prisma generate
+RUN npm install --ignore-scripts
 
-# Copy the rest of the application code
+# Generate Prisma Client explicitly with dummy URL
+RUN DATABASE_URL=postgresql://postgres:postgres@localhost:5432/whatsappfly npx prisma generate
+
+# Copy the rest of the application
 COPY . .
 
-# Railway provides the PORT environment variable
+# Expose the API port
 EXPOSE 3001
 
-# Start the Express server
 CMD ["npm", "run", "server:start"]

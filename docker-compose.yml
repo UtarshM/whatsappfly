@@ -1,33 +1,62 @@
 services:
-  # 1. Backend (The Express API)
-  backend:
-    build: .
-    ports:
-      - "3001:3001"
+  # 1. Database (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: whatsappfly-db
     environment:
-      - PORT=3001
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-    depends_on:
-      - redis
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=whatsappfly
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
-  # 2. Redis (Used for distributed locking)
+  # 2. Redis (Used for locking and flows)
   redis:
     image: redis:7-alpine
+    container_name: whatsappfly-redis
     ports:
       - "6379:6379"
 
-  # 3. Frontend (Vite Development Server)
-  frontend:
-    image: node:20-bullseye
-    working_dir: /app
-    volumes:
-      - .:/app
-    ports:
-      - "5173:5173"
+  # 3. Backend (The Express API)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsappfly-backend
     environment:
-      - VITE_API_BASE_URL=http://localhost:3001
-      - VITE_API_ADAPTER=http
-    command: sh -c "npm install && npm run dev -- --host"
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/whatsappfly?schema=public
+      - REDIS_URL=redis://redis:6379
+      - SUPABASE_URL=${VITE_SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - CRON_SECRET=${CRON_SECRET}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+      - redis
+    # Run Prisma migrations on startup
+    command: sh -c "npx prisma db push && npm run server:start"
+
+  # 4. Frontend (The React App served by Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - VITE_API_BASE_URL=http://localhost:3001
+        - VITE_API_ADAPTER=http
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    container_name: whatsappfly-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
