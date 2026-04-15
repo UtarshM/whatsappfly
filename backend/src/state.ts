@@ -352,16 +352,16 @@ export async function buildAppState(prisma: PrismaClient, user: User | null): Pr
   ] = await Promise.all([
     supabase.from("whatsapp_connections").select("*").eq("workspace_id", workspace.id).maybeSingle(),
     supabase.from("meta_authorizations").select("*").eq("workspace_id", workspace.id).maybeSingle(),
-    supabase.from("conversations").select("*").eq("workspace_id", workspace.id).orderBy("last_message_at", { ascending: false }),
-    supabase.from("conversation_messages").select("*").eq("workspace_id", workspace.id).orderBy("sent_at", { ascending: true }),
-    supabase.from("conversation_notes").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("conversation_events").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("failed_send_logs").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("operational_logs").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("leads").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("automation_rules").select("*").eq("workspace_id", workspace.id).orderBy("updated_at", { ascending: false }),
-    supabase.from("automation_events").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
-    supabase.from("wallet_transactions").select("*").eq("workspace_id", workspace.id).orderBy("created_at", { ascending: false }),
+    supabase.from("conversations").select("*").eq("workspace_id", workspace.id).order("last_message_at", { ascending: false }),
+    supabase.from("conversation_messages").select("*").eq("workspace_id", workspace.id).order("sent_at", { ascending: true }),
+    supabase.from("conversation_notes").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("conversation_events").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("failed_send_logs").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("operational_logs").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("leads").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("automation_rules").select("*").eq("workspace_id", workspace.id).order("updated_at", { ascending: false }),
+    supabase.from("automation_events").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
+    supabase.from("wallet_transactions").select("*").eq("workspace_id", workspace.id).order("created_at", { ascending: false }),
   ]);
 
   const supabaseTransactions = transactionsRes?.data ?? [];
